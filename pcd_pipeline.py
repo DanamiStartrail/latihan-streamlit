@@ -36,9 +36,10 @@ def proses_pcd_model_a(image_pil):
     )
 
     # Tahap 4A: Ekstraksi Fitur Histogram HSV (8 bin per kanal) pada area masker
-    hist_h = cv2.calcHist([hsv], , mask_final,, )
-    hist_s = cv2.calcHist([hsv],, mask_final,, )
-    hist_v = cv2.calcHist([hsv],, mask_final,, )
+    # Parameter: [images], [channel], mask, [histSize], [ranges]
+    hist_h = cv2.calcHist([hsv],, mask_final,,)
+    hist_s = cv2.calcHist([hsv],, mask_final,,)
+    hist_v = cv2.calcHist([hsv],, mask_final,,)
 
     # Normalisasi histogram agar total sum = 1
     hist_features = np.concatenate([hist_h, hist_s, hist_v]).flatten()
