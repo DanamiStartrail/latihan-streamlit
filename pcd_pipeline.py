@@ -3,6 +3,7 @@ import numpy as np
 from PIL import Image
 from skimage.feature import graycomatrix, graycoprops
 
+
 def proses_pcd_model_a(image_pil):
     """Mengimplementasikan 4 Tahap Model A PCD Klasik dari Proposal Tubes:
 
@@ -21,9 +22,7 @@ def proses_pcd_model_a(image_pil):
     # Tahap 2: Transformasi RGB ke HSV & Otsu pada Kanal S
     hsv = cv2.cvtColor(img_blurred, cv2.COLOR_RGB2HSV)
     s_channel = hsv[:, :, 1]  # Kanal Saturasi
-    _, mask_otsu = cv2.threshold(
-        s_channel, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU
-    )
+    _, mask_otsu = cv2.threshold(s_channel, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
     # Tahap 3: Operasi Morfologi (Opening diikuti Closing)
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
@@ -31,20 +30,18 @@ def proses_pcd_model_a(image_pil):
     mask_final = cv2.morphologyEx(mask_open, cv2.MORPH_CLOSE, kernel)
 
     # Terapkan masker ke citra hasil segmentasi makanan
-    segmented_food = cv2.bitwise_and(
-        img_resized, img_resized, mask=mask_final
-    )
+    segmented_food = cv2.bitwise_and(img_resized, img_resized, mask=mask_final)
 
     # Tahap 4A: Ekstraksi Fitur Histogram HSV (8 bin per kanal) pada area masker
     # Parameter: [images], [channel], mask, [histSize], [ranges]
-    hist_h = cv2.calcHist([hsv],, mask_final,,)
-    hist_s = cv2.calcHist([hsv],, mask_final,,)
-    hist_v = cv2.calcHist([hsv],, mask_final,,)
+    hist_h = cv2.calcHist([hsv], [0], mask_final, [8], [0, 180])
+    hist_s = cv2.calcHist([hsv], [1], mask_final, [8], [0, 256])
+    hist_v = cv2.calcHist([hsv], [2], mask_final, [8], [0, 256])
 
     # Normalisasi histogram agar total sum = 1
     hist_features = np.concatenate([hist_h, hist_s, hist_v]).flatten()
     if hist_features.sum() > 0:
-        hist_features /= hist_features.sum()
+        hist_features = hist_features / hist_features.sum()
 
     # Tahap 4B: Ekstraksi 4 Fitur Tekstur GLCM pada Grayscale ber-masker
     gray = cv2.cvtColor(img_resized, cv2.COLOR_RGB2GRAY)
@@ -53,17 +50,17 @@ def proses_pcd_model_a(image_pil):
     # Hitung GLCM (jarak 1 piksel, sudut 0 derajat)
     glcm = graycomatrix(
         gray_masked,
-        distances=,
-        angles=,
+        distances=[1],
+        angles=[0],
         levels=256,
         symmetric=True,
         normed=True,
     )
 
-    glcm_contrast = graycoprops(glcm, "contrast")
-    glcm_homogeneity = graycoprops(glcm, "homogeneity")
-    glcm_energy = graycoprops(glcm, "energy")
-    glcm_correlation = graycoprops(glcm, "correlation")
+    glcm_contrast = graycoprops(glcm, "contrast")[0, 0]
+    glcm_homogeneity = graycoprops(glcm, "homogeneity")[0, 0]
+    glcm_energy = graycoprops(glcm, "energy")[0, 0]
+    glcm_correlation = graycoprops(glcm, "correlation")[0, 0]
 
     glcm_features = {
         "Contrast": round(float(glcm_contrast), 4),
