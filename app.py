@@ -1,92 +1,81 @@
-import cv2
-import numpy as np
 import streamlit as st
+from PIL import Image
 
-# Impor fungsi pengolahan citra dari modul lokal
-from image_processing import (
-    terapkan_gaussian_blur,
-    terapkan_threshold,
-    ubah_ke_grayscale,
-)
+from pcd_pipeline import proses_pcd_model_a
 
-# Konfigurasi Halaman Streamlit
-st.set_page_config(
-    page_title="PCD Demo App - Application Engineer",
-    page_icon="🖼️",
-    layout="wide",
-)
+# Pengaturan Halaman
+st.set_page_config(page_title="PCD NMAX - Pengenalan Makanan", layout="wide")
 
-st.title("🖼️ Aplikasi Pengolahan Citra Digital")
+st.title("🍲 Demo Pipeline PCD Klasik (Model A) - Kelompok NMAX")
 st.write(
-    "Selamat datang! Unggah citra untuk mencoba berbagai operasi pengolahan citra."
+    "Uji coba visualisasi 4 tahap pengolahan citra digital untuk segmentasi dan ekstraksi fitur makanan."
 )
 
-# --- SIDEBAR: PENGATURAN & KONTROL ---
-st.sidebar.header("⚙️ Kontrol & Parameter")
-
-# Widget Upload Citra
+# Komponen Pengunggah File
 uploaded_file = st.sidebar.file_uploader(
-    "Unggah Citra Masukan", type=["jpg", "png", "jpeg", "tif"]
+    "Pilih Foto Makanan...", type=["jpg", "jpeg", "png"]
 )
 
-# Widget Pemilihan Operasi
-operasi = st.sidebar.selectbox(
-    "Pilih Operasi PCD",
-    ["Grayscale", "Thresholding (Biner)", "Gaussian Blur (Filtering)"],
-)
-
-# Parameter dinamis berdasarkan operasi yang dipilih
-if operasi == "Thresholding (Biner)":
-    threshold_val = st.sidebar.slider(
-        "Nilai Ambang (Threshold)",
-        min_value=0,
-        max_value=255,
-        value=128,
-        step=1,
-    )
-elif operasi == "Gaussian Blur (Filtering)":
-    kernel_size = st.sidebar.slider(
-        "Ukuran Kernel (Ganjil)", min_value=3, max_value=31, value=5, step=2
-    )
-
-# --- AREA UTAMA DISPLAY ---
 if uploaded_file is not None:
-    # 1. Konversi uploaded file Streamlit ke format NumPy Array (OpenCV BGR)
-    file_bytes = np.asarray(bytearray(uploaded_file.read()), dtype=np.uint8)
-    img_bgr = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
+    image_pil = Image.open(uploaded_file)
 
-    # Convert BGR ke RGB untuk tampilan awal di Streamlit
-    img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
+    # Eksekusi Pipeline PCD
+    with st.spinner("Memproses tahapan PCD..."):
+        res = proses_pcd_model_a(image_pil)
 
-    # 2. Proses citra berdasarkan pilihan pengguna
-    if operasi == "Grayscale":
-        img_hasil = ubah_ke_grayscale(img_bgr)
-    elif operasi == "Thresholding (Biner)":
-        img_hasil = terapkan_threshold(img_bgr, threshold_val)
-    elif operasi == "Gaussian Blur (Filtering)":
-        img_hasil_bgr = terapkan_gaussian_blur(img_bgr, kernel_size)
-        img_hasil = cv2.cvtColor(img_hasil_bgr, cv2.COLOR_BGR2RGB)
+    st.subheader("1. Visualisasi Tahapan Pengolahan Citra Digital")
 
-    # 3. Tampilkan Citra Side-by-Side (Sebelum & Sesudah)
-    col1, col2 = st.columns(2)
-
+    # Baris 1: Citra Asli, Gaussian Blur, Kanal S (HSV)
+    col1, col2, col3 = st.columns(3)
     with col1:
-        st.subheader("📷 Citra Asli")
         st.image(
-            img_rgb, channels="RGB", use_container_width=True
+            res["resized"], caption="1A. Resized (256x256)", use_container_width=True
+        )
+    with col2:
+        st.image(
+            res["blurred"], caption="1B. Gaussian Blur (5x5)", use_container_width=True
+        )
+    with col3:
+        st.image(
+            res["s_channel"],
+            caption="2A. Kanal Saturasi (S) HSV",
+            use_container_width=True,
+            clamp=True,
         )
 
-    with col2:
-        st.subheader(f"✨ Hasil Operasi ({operasi})")
-        # Menyesuaikan penanganan kanal warna untuk gambar 1-kanal (grayscale/biner) vs 3-kanal (RGB)
-        if len(img_hasil.shape) == 2:
-            st.image(
-                img_hasil, use_container_width=True
-            )
-        else:
-            st.image(
-                img_hasil, channels="RGB", use_container_width=True
-            )
+    # Baris 2: Threshold Otsu, Masker Morfologi, Hasil Segmentasi
+    col4, col5, col6 = st.columns(3)
+    with col4:
+        st.image(
+            res["mask_otsu"], caption="2B. Otsu Thresholding", use_container_width=True
+        )
+    with col5:
+        st.image(
+            res["mask_final"],
+            caption="3. Masker Morfologi (Open+Close)",
+            use_container_width=True,
+        )
+    with col6:
+        st.image(
+            res["segmented"],
+            caption="Hasil Akhir Segmentasi Makanan",
+            use_container_width=True,
+        )
 
+    st.markdown("---")
+    st.subheader("2. Hasil Ekstraksi Fitur Tekstur (GLCM)")
+
+    # Menampilkan Fitur GLCM dalam bentuk Metric Card
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Contrast", res["glcm_features"]["Contrast"])
+    m2.metric("Homogeneity", res["glcm_features"]["Homogeneity"])
+    m3.metric("Energy", res["glcm_features"]["Energy"])
+    m4.metric("Correlation", res["glcm_features"]["Correlation"])
+
+    st.markdown("---")
+    st.subheader("3. Vektor Fitur Histogram Warna HSV")
+    st.bar_chart(res["hist_features"])
 else:
-    st.info("👈 Silakan unggah gambar pada sidebar sebelah kiri untuk memulai.")
+    st.info(
+        "💡 Silakan unggah foto makanan di panel samping kiri untuk memulai uji coba!"
+    )
